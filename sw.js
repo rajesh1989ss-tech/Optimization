@@ -1,8 +1,8 @@
 /* Optimizations PWA — network-first service worker.
    Always tries the network (so updates land immediately when online),
    falls back to the cached copy when offline. Bump CACHE on releases. */
-const CACHE = 'optimizations-v1';
-const CORE = ['./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
+const CACHE = 'optimizations-v2';
+const CORE = ['./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png','./icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));
