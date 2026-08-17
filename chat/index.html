@@ -1,0 +1,1724 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e1116">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="chat-192.png">
+<link rel="apple-touch-icon" href="chat-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<title>Crew Chat</title>
+<style>
+/* Fonts are deliberately system-only: a webfont CDN is exactly the kind of
+   thing that turns "offline app" into a blank screen at sea. */
+:root {
+  --bg: #0e1116;
+  --bg-elev: #161b22;
+  --bg-card: #1a2029;
+  --bg-hover: #20262f;
+  --border: #2a313c;
+  --border-soft: #222831;
+  --text: #e6edf3;
+  --text-dim: #9aa6b2;
+  --text-faint: #687078;
+  --accent: #5b8def;
+  --accent-soft: rgba(91,141,239,0.15);
+  --mine: #1d3a63;
+  --ok: #3fb950;
+  --warn: #f0a830;
+  --bad: #f25555;
+  --radius: 14px;
+  --radius-sm: 9px;
+  --shadow: 0 4px 16px rgba(0,0,0,0.4);
+  --shadow-lg: 0 12px 40px rgba(0,0,0,0.55);
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+[data-theme="light"] {
+  --bg: #f4f6f9;
+  --bg-elev: #ffffff;
+  --bg-card: #ffffff;
+  --bg-hover: #eef1f6;
+  --border: #d8dee6;
+  --border-soft: #e6ebf1;
+  --text: #1a2029;
+  --text-dim: #5a6573;
+  --text-faint: #8b95a1;
+  --accent: #3366d6;
+  --accent-soft: rgba(51,102,214,0.12);
+  --mine: #d9e5fb;
+  --ok: #2a9b3e;
+  --warn: #c47d10;
+  --bad: #d63838;
+  --shadow: 0 4px 16px rgba(40,50,70,0.10);
+  --shadow-lg: 0 12px 40px rgba(40,50,70,0.18);
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  margin: 0; height: 100%;
+  background: var(--bg); color: var(--text);
+  font-family: var(--font);
+  font-size: 15px; line-height: 1.45;
+  overscroll-behavior: none;
+}
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; border: none; background: none; }
+
+/* ---------------------------------------------------------------- layout */
+#app { display: none; height: 100dvh; grid-template-columns: 272px 1fr; }
+#app.ready { display: grid; }
+
+aside {
+  display: flex; flex-direction: column; min-height: 0;
+  background: var(--bg-elev); border-right: 1px solid var(--border);
+}
+main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+
+/* ---------------------------------------------------------------- sidebar */
+.brand {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 14px 10px; padding-top: max(14px, env(safe-area-inset-top));
+}
+.brand .logo {
+  width: 30px; height: 30px; border-radius: 9px; flex: none;
+  background: linear-gradient(135deg, var(--accent), #7b5bef);
+  display: grid; place-items: center; font-size: 15px;
+}
+.brand h1 { font-size: 15px; margin: 0; letter-spacing: .2px; }
+.brand .sub { font-size: 11px; color: var(--text-faint); margin-top: -2px; }
+
+.status {
+  margin: 0 12px 10px; padding: 7px 10px; border-radius: var(--radius-sm);
+  font-size: 12px; display: flex; align-items: center; gap: 7px;
+  background: var(--bg-card); border: 1px solid var(--border-soft);
+}
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--text-faint); }
+.status.live .dot { background: var(--ok); box-shadow: 0 0 0 3px rgba(63,185,80,.16); }
+.status.retry .dot { background: var(--warn); animation: pulse 1.2s infinite; }
+.status.down .dot { background: var(--bad); }
+@keyframes pulse { 50% { opacity: .3; } }
+
+.scroll { flex: 1; overflow-y: auto; padding: 0 8px 12px; }
+.section {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 8px 6px; font-size: 11px; letter-spacing: .8px;
+  text-transform: uppercase; color: var(--text-faint);
+}
+.section button { color: var(--text-faint); font-size: 16px; padding: 0 4px; line-height: 1; }
+.section button:hover { color: var(--accent); }
+
+.item {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 8px 10px; border-radius: var(--radius-sm);
+  color: var(--text-dim); font-size: 14px; text-align: left;
+}
+.item:hover { background: var(--bg-hover); color: var(--text); }
+.item.on { background: var(--accent-soft); color: var(--text); font-weight: 600; }
+.item .label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item .hash { color: var(--text-faint); font-family: var(--mono); }
+.badge {
+  background: var(--accent); color: #fff; font-size: 11px; font-weight: 700;
+  min-width: 19px; text-align: center; border-radius: 10px; padding: 1px 6px;
+}
+.presence { width: 8px; height: 8px; border-radius: 50%; background: var(--text-faint); flex: none; }
+.presence.on { background: var(--ok); }
+
+.avatar {
+  width: 26px; height: 26px; border-radius: 50%; flex: none;
+  display: grid; place-items: center; font-size: 11px; font-weight: 700; color: #fff;
+}
+
+.me-bar {
+  display: flex; align-items: center; gap: 9px; padding: 10px 12px;
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border-soft); background: var(--bg-elev);
+}
+.me-bar .who { flex: 1; min-width: 0; }
+.me-bar .nick { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.me-bar .id { font-size: 10px; color: var(--text-faint); font-family: var(--mono); }
+.icon-btn {
+  width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center;
+  color: var(--text-dim); font-size: 16px;
+}
+.icon-btn:hover { background: var(--bg-hover); color: var(--text); }
+
+/* ------------------------------------------------------------------ main */
+header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top));
+  border-bottom: 1px solid var(--border); background: var(--bg-elev);
+}
+header .title { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 7px; min-width: 0; }
+header .title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+header .meta { font-size: 12px; color: var(--text-faint); }
+header .spacer { flex: 1; }
+#menuBtn { display: none; }
+
+#messages { flex: 1; overflow-y: auto; padding: 16px 16px 8px; scroll-behavior: smooth; display: flex; flex-direction: column; }
+/* Holds a short conversation down at the composer instead of stranding it at
+   the top of an empty screen; collapses to nothing once messages overflow. */
+.pusher { flex: 1 1 0; min-height: 0; }
+.day {
+  text-align: center; margin: 18px 0 12px; font-size: 11px; color: var(--text-faint);
+  letter-spacing: .6px; text-transform: uppercase;
+}
+.day span { background: var(--bg-card); padding: 3px 12px; border-radius: 10px; border: 1px solid var(--border-soft); }
+
+.row { display: flex; gap: 10px; margin-bottom: 2px; padding: 1px 0; }
+.row.mine { flex-direction: row-reverse; }
+.row .gutter { width: 30px; flex: none; }
+.row .avatar { width: 30px; height: 30px; font-size: 12px; }
+.bubble-wrap { max-width: min(640px, 78%); min-width: 0; }
+.row.mine .bubble-wrap { align-items: flex-end; display: flex; flex-direction: column; }
+.who-line { font-size: 12px; color: var(--text-dim); margin: 6px 0 3px; font-weight: 600; }
+
+.bubble {
+  background: var(--bg-card); border: 1px solid var(--border-soft);
+  padding: 8px 12px; border-radius: var(--radius);
+  border-top-left-radius: 5px; position: relative;
+  word-wrap: break-word; overflow-wrap: anywhere; white-space: pre-wrap;
+}
+.row.mine .bubble { background: var(--mine); border-color: transparent; border-top-left-radius: var(--radius); border-top-right-radius: 5px; }
+.row.cont .bubble { border-top-left-radius: var(--radius); }
+.bubble.gone { color: var(--text-faint); font-style: italic; white-space: normal; }
+.bubble a { color: var(--accent); }
+.bubble .mention { color: var(--accent); font-weight: 600; }
+.bubble .mention.me { background: var(--accent-soft); border-radius: 4px; padding: 0 3px; }
+
+.stamp { font-size: 10px; color: var(--text-faint); margin-top: 3px; display: flex; gap: 5px; align-items: center; }
+.row.mine .stamp { justify-content: flex-end; }
+.tick.pending { color: var(--warn); }
+.tick.sent { color: var(--ok); }
+
+.reply-quote {
+  border-left: 3px solid var(--accent); padding: 2px 8px; margin-bottom: 5px;
+  background: rgba(127,127,127,.09); border-radius: 5px; font-size: 12px;
+  color: var(--text-dim); cursor: pointer; white-space: normal;
+  overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.reply-quote b { color: var(--text); display: block; font-size: 11px; }
+
+.att img, .att video { max-width: 100%; border-radius: var(--radius-sm); display: block; margin-top: 4px; cursor: zoom-in; }
+.att audio { width: 100%; margin-top: 6px; }
+.file-chip {
+  display: flex; align-items: center; gap: 9px; padding: 8px 10px; margin-top: 4px;
+  background: rgba(127,127,127,.12); border-radius: var(--radius-sm); color: inherit; text-decoration: none;
+}
+.file-chip .fname { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-chip .fsize { font-size: 11px; color: var(--text-faint); }
+
+.reactions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.reaction {
+  font-size: 12px; padding: 1px 7px; border-radius: 10px;
+  background: var(--bg-hover); border: 1px solid var(--border-soft);
+}
+.reaction.mine { border-color: var(--accent); background: var(--accent-soft); }
+
+.tools {
+  position: absolute; top: -13px; right: 6px; display: none; gap: 1px;
+  background: var(--bg-elev); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: var(--shadow); padding: 1px; z-index: 2;
+}
+.row:hover .tools, .row.touched .tools { display: flex; }
+.tools button { padding: 3px 6px; font-size: 13px; border-radius: 6px; line-height: 1.2; }
+.tools button:hover { background: var(--bg-hover); }
+
+.typing { padding: 2px 16px 6px; font-size: 12px; color: var(--text-faint); height: 20px; }
+.empty { text-align: center; color: var(--text-faint); padding: 48px 20px; font-size: 14px; }
+.more { display: block; margin: 4px auto 14px; font-size: 12px; color: var(--accent); padding: 5px 12px; border-radius: 8px; border: 1px solid var(--border); }
+
+/* -------------------------------------------------------------- composer */
+.composer {
+  border-top: 1px solid var(--border); background: var(--bg-elev);
+  padding: 10px 12px; padding-bottom: max(10px, env(safe-area-inset-bottom));
+}
+.reply-bar, .queue-bar {
+  display: none; align-items: center; gap: 8px; font-size: 12px;
+  padding: 6px 10px; margin-bottom: 8px; border-radius: var(--radius-sm);
+  background: var(--bg-card); border: 1px solid var(--border-soft);
+}
+.reply-bar.show, .queue-bar.show { display: flex; }
+.queue-bar { color: var(--warn); border-color: var(--warn); }
+.reply-bar .txt { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); }
+
+.input-row { display: flex; align-items: flex-end; gap: 8px; }
+#text {
+  flex: 1; resize: none; max-height: 160px; min-height: 42px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 13px; outline: none;
+}
+#text:focus { border-color: var(--accent); }
+.send {
+  width: 42px; height: 42px; flex: none; border-radius: 50%;
+  background: var(--accent); color: #fff; display: grid; place-items: center; font-size: 17px;
+}
+.send:disabled { opacity: .4; }
+.attach { width: 42px; height: 42px; flex: none; border-radius: 50%; background: var(--bg-card); border: 1px solid var(--border); display: grid; place-items: center; font-size: 17px; color: var(--text-dim); }
+.pending-att { display: none; align-items: center; gap: 8px; font-size: 12px; margin-bottom: 8px; color: var(--text-dim); }
+.pending-att.show { display: flex; }
+.pending-att img { width: 38px; height: 38px; object-fit: cover; border-radius: 7px; }
+
+/* The drawer scrim is fixed-position and lives outside the app grid, so it
+   never takes a column of its own. */
+#scrim { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 39; display: none; }
+
+/* ---------------------------------------------------------------- modals */
+.veil {
+  position: fixed; inset: 0; background: rgba(0,0,0,.6); backdrop-filter: blur(3px);
+  display: none; align-items: center; justify-content: center; padding: 20px; z-index: 50;
+}
+.veil.show { display: flex; }
+.sheet {
+  background: var(--bg-elev); border: 1px solid var(--border); border-radius: 18px;
+  padding: 22px; width: 100%; max-width: 400px; box-shadow: var(--shadow-lg);
+  max-height: 86dvh; overflow-y: auto;
+}
+.sheet h2 { margin: 0 0 6px; font-size: 19px; }
+.sheet p.hint { margin: 0 0 16px; font-size: 13px; color: var(--text-dim); }
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 5px; }
+.field input, .field select {
+  width: 100%; padding: 11px 13px; border-radius: var(--radius-sm);
+  background: var(--bg-card); border: 1px solid var(--border); outline: none;
+}
+.field input:focus { border-color: var(--accent); }
+.btn {
+  width: 100%; padding: 12px; border-radius: var(--radius-sm);
+  background: var(--accent); color: #fff; font-weight: 600;
+}
+.btn.ghost { background: transparent; border: 1px solid var(--border); color: var(--text-dim); margin-top: 8px; }
+.btn.danger { background: transparent; border: 1px solid var(--bad); color: var(--bad); margin-top: 8px; }
+.err { color: var(--bad); font-size: 13px; min-height: 18px; margin-top: 8px; }
+.toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 9px 0; font-size: 14px; border-bottom: 1px solid var(--border-soft); }
+.switch { width: 42px; height: 24px; border-radius: 12px; background: var(--border); position: relative; transition: background .15s; flex: none; }
+.switch.on { background: var(--accent); }
+.switch i { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: left .15s; }
+.switch.on i { left: 21px; }
+
+#lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.92); display: none; place-items: center; z-index: 60; padding: 16px; }
+#lightbox.show { display: grid; }
+#lightbox img { max-width: 100%; max-height: 90dvh; border-radius: 10px; }
+
+.search-result { padding: 9px 10px; border-radius: var(--radius-sm); cursor: pointer; border-bottom: 1px solid var(--border-soft); }
+.search-result:hover { background: var(--bg-hover); }
+.search-result .top { font-size: 11px; color: var(--text-faint); display: flex; justify-content: space-between; }
+.search-result .body { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: 88px;
+  background: var(--bg-card); border: 1px solid var(--border); color: var(--text);
+  padding: 9px 16px; border-radius: 20px; font-size: 13px; box-shadow: var(--shadow-lg);
+  z-index: 70; opacity: 0; pointer-events: none; transition: opacity .2s;
+}
+.toast.show { opacity: 1; }
+
+/* --------------------------------------------------------------- mobile */
+@media (max-width: 760px) {
+  #app.ready { grid-template-columns: 1fr; }
+  aside {
+    position: fixed; inset: 0 auto 0 0; width: 280px; z-index: 40;
+    transform: translateX(-101%); transition: transform .22s ease; box-shadow: var(--shadow-lg);
+  }
+  aside.open { transform: none; }
+  #menuBtn { display: grid; }
+  .bubble-wrap { max-width: 84%; }
+  #scrim.show { display: block; }
+}
+</style>
+</head>
+<body>
+
+<!-- ------------------------------------------------------------- join gate -->
+<div class="veil show" id="joinVeil">
+  <div class="sheet">
+    <h2>Crew Chat</h2>
+    <p class="hint">Messaging over this Wi-Fi only. Nothing leaves the network, no internet needed.</p>
+    <div class="field">
+      <label for="joinNick">Your name</label>
+      <input id="joinNick" maxlength="32" placeholder="e.g. Rajesh (2/O)" autocomplete="nickname">
+    </div>
+    <div class="field" id="passField" style="display:none">
+      <label for="joinPass">Passcode</label>
+      <input id="joinPass" type="password" placeholder="Ask whoever is hosting">
+    </div>
+    <button class="btn" id="joinBtn">Join</button>
+    <div class="err" id="joinErr"></div>
+  </div>
+</div>
+
+<!-- ------------------------------------------------------------------ app -->
+<div id="scrim"></div>
+<div id="app">
+  <aside id="sidebar">
+    <div class="brand">
+      <div class="logo">💬</div>
+      <div>
+        <h1>Crew Chat</h1>
+        <div class="sub">local Wi-Fi · no internet</div>
+      </div>
+    </div>
+    <div class="status" id="status"><span class="dot"></span><span id="statusText">Connecting…</span></div>
+    <div class="scroll">
+      <div class="section">Channels <button id="addRoom" title="New channel">+</button></div>
+      <div id="roomList"></div>
+      <div class="section">Crew</div>
+      <div id="crewList"></div>
+    </div>
+    <div class="me-bar">
+      <div class="avatar" id="meAvatar"></div>
+      <div class="who">
+        <div class="nick" id="meNick"></div>
+        <div class="id" id="meId"></div>
+      </div>
+      <button class="icon-btn" id="searchBtn" title="Search">🔍</button>
+      <button class="icon-btn" id="settingsBtn" title="Settings">⚙</button>
+    </div>
+  </aside>
+
+  <main>
+    <header>
+      <button class="icon-btn" id="menuBtn">☰</button>
+      <div class="title"><span id="roomTitle">general</span></div>
+      <div class="spacer"></div>
+      <div class="meta" id="roomMeta"></div>
+    </header>
+    <div id="messages"></div>
+    <div class="typing" id="typing"></div>
+    <div class="composer">
+      <div class="queue-bar" id="queueBar"></div>
+      <div class="reply-bar" id="replyBar">
+        <span>↩</span><span class="txt" id="replyTxt"></span>
+        <button class="icon-btn" id="replyCancel" style="width:24px;height:24px">✕</button>
+      </div>
+      <div class="pending-att" id="pendingAtt"></div>
+      <div class="input-row">
+        <button class="attach" id="attachBtn" title="Attach">＋</button>
+        <textarea id="text" rows="1" placeholder="Message…" maxlength="8000"></textarea>
+        <button class="send" id="sendBtn" disabled>➤</button>
+      </div>
+      <input type="file" id="file" hidden>
+    </div>
+  </main>
+</div>
+
+<!-- --------------------------------------------------------------- dialogs -->
+<div class="veil" id="settingsVeil">
+  <div class="sheet">
+    <h2>Settings</h2>
+    <div class="field">
+      <label for="setNick">Display name</label>
+      <input id="setNick" maxlength="32">
+    </div>
+    <div class="field">
+      <label for="setTheme">Theme</label>
+      <select id="setTheme"><option value="dark">Dark</option><option value="light">Light</option></select>
+    </div>
+    <div class="toggle-row">Sound on new message <div class="switch" id="setSound"><i></i></div></div>
+    <div class="toggle-row">Desktop notifications <div class="switch" id="setNotify"><i></i></div></div>
+    <div class="toggle-row">Enter sends message <div class="switch" id="setEnter"><i></i></div></div>
+    <div style="height:16px"></div>
+    <button class="btn" id="settingsSave">Save</button>
+    <button class="btn ghost" id="exportBtn">Export this channel</button>
+    <button class="btn danger" id="wipeBtn">Clear local copy</button>
+    <p class="hint" style="margin:12px 0 0">Clearing removes history from this device only. Anything the host still has comes back on reconnect.</p>
+  </div>
+</div>
+
+<div class="veil" id="roomVeil">
+  <div class="sheet">
+    <h2>New channel</h2>
+    <p class="hint">Lowercase, no spaces. Everyone on the Wi-Fi can see channels.</p>
+    <div class="field"><input id="roomName" maxlength="32" placeholder="engine-room"></div>
+    <button class="btn" id="roomCreate">Create</button>
+    <button class="btn ghost" id="roomCancel">Cancel</button>
+  </div>
+</div>
+
+<div class="veil" id="searchVeil">
+  <div class="sheet">
+    <h2>Search</h2>
+    <div class="field"><input id="searchInput" placeholder="Find a message…"></div>
+    <div id="searchResults"></div>
+  </div>
+</div>
+
+<div id="lightbox"><img id="lightboxImg" alt=""></div>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+/* =====================================================================
+   Crew Chat client.
+
+   Three things make this work without internet:
+     1. Everything is served by the hub on the LAN, no CDN, no webfonts.
+     2. Every event the hub has ever recorded is mirrored into IndexedDB,
+        so the app opens and reads back fine with the hub switched off.
+     3. Messages written while disconnected go into an outbox and flush
+        on reconnect, keyed by a client-generated id so a retry that
+        crossed with an ack can never duplicate.
+   ===================================================================== */
+
+const $ = (id) => document.getElementById(id);
+const EMOJI = ['👍', '✅', '❤️', '😂', '🙏', '👀'];
+
+/* ------------------------------------------------------------ local store */
+
+const DB_NAME = 'crewchat';
+let db = null;
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const d = req.result;
+      if (!d.objectStoreNames.contains('events')) d.createObjectStore('events', { keyPath: 'seq' });
+      if (!d.objectStoreNames.contains('outbox')) d.createObjectStore('outbox', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('meta')) d.createObjectStore('meta');
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function tx(store, mode) { return db.transaction(store, mode).objectStore(store); }
+
+function idbGet(store, key) {
+  return new Promise((res, rej) => {
+    const r = tx(store, 'readonly').get(key);
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+function idbAll(store) {
+  return new Promise((res, rej) => {
+    const r = tx(store, 'readonly').getAll();
+    r.onsuccess = () => res(r.result || []);
+    r.onerror = () => rej(r.error);
+  });
+}
+function idbPut(store, value, key) {
+  return new Promise((res, rej) => {
+    const r = key === undefined ? tx(store, 'readwrite').put(value) : tx(store, 'readwrite').put(value, key);
+    r.onsuccess = () => res();
+    r.onerror = () => rej(r.error);
+  });
+}
+function idbDel(store, key) {
+  return new Promise((res, rej) => {
+    const r = tx(store, 'readwrite').delete(key);
+    r.onsuccess = () => res();
+    r.onerror = () => rej(r.error);
+  });
+}
+function idbPutMany(store, values) {
+  return new Promise((res, rej) => {
+    const t = db.transaction(store, 'readwrite');
+    const s = t.objectStore(store);
+    for (const v of values) s.put(v);
+    t.oncomplete = () => res();
+    t.onerror = () => rej(t.error);
+  });
+}
+
+/* ------------------------------------------------------------------ state */
+
+const state = {
+  me: { id: '', nick: '' },
+  passcode: '',
+  lastSeq: 0,
+  rooms: new Map(),        // roomId -> {id,name,kind,members}
+  msgs: new Map(),         // msgId -> message
+  byRoom: new Map(),       // roomId -> [message] sorted oldest first
+  users: new Map(),        // deviceId -> {id,nick,online,lastSeen}
+  outbox: new Map(),       // msgId -> queued message
+  room: 'general',
+  reply: null,
+  attachment: null,
+  typers: new Map(),       // deviceId -> expiry
+  lastRead: {},            // roomId -> highest seq seen
+  limit: 200,              // how many messages of the open room are rendered
+  prefs: { theme: 'dark', sound: true, notify: false, enterSends: true },
+};
+
+/* The reducer. Byte-for-byte the same rules the hub applies, which is why a
+   client that has been offline for a day ends up with the same picture as one
+   that never disconnected. */
+function applyEvent(ev) {
+  if (ev.seq > state.lastSeq) state.lastSeq = ev.seq;
+
+  if (ev.t === 'room') { ensureRoom(ev.id, ev); return; }
+
+  if (ev.t === 'msg') {
+    ensureRoom(ev.room);
+    const existing = state.msgs.get(ev.id);
+    if (existing) {
+      /* Our own optimistic copy coming back from the hub: keep the object
+         identity, drop the pending flag. */
+      Object.assign(existing, ev, { pending: false, reactions: existing.reactions || ev.reactions });
+      return;
+    }
+    const msg = Object.assign({}, ev);
+    state.msgs.set(msg.id, msg);
+    insertSorted(bucket(msg.room), msg);
+    return;
+  }
+
+  if (ev.t === 'react') {
+    const m = state.msgs.get(ev.msg);
+    if (!m) return;
+    m.reactions = m.reactions || {};
+    const who = m.reactions[ev.emoji] || [];
+    const i = who.indexOf(ev.from);
+    if (ev.on && i === -1) who.push(ev.from);
+    if (!ev.on && i !== -1) who.splice(i, 1);
+    if (who.length) m.reactions[ev.emoji] = who; else delete m.reactions[ev.emoji];
+    return;
+  }
+
+  if (ev.t === 'del') {
+    const m = state.msgs.get(ev.msg);
+    if (m && m.from === ev.from) { m.deleted = true; m.text = ''; m.att = null; }
+  }
+}
+
+function bucket(roomId) {
+  let list = state.byRoom.get(roomId);
+  if (!list) { list = []; state.byRoom.set(roomId, list); }
+  return list;
+}
+
+/* Messages arrive out of order after a reconnect, so insert from the back —
+   which is O(1) for the common "newest message" case. */
+function insertSorted(list, msg) {
+  let i = list.length - 1;
+  while (i >= 0 && order(list[i]) > order(msg)) i--;
+  list.splice(i + 1, 0, msg);
+}
+function order(m) { return (m.at || 0) * 1e6 + (m.seq || 1e5); }
+
+function ensureRoom(id, info) {
+  if (state.rooms.has(id) && !info) return state.rooms.get(id);
+  const prev = state.rooms.get(id) || {};
+  const room = {
+    id,
+    name: (info && info.name) || prev.name || id,
+    kind: (info && info.kind) || prev.kind || (id.startsWith('dm:') ? 'dm' : 'channel'),
+    members: (info && info.members) || prev.members || (id.startsWith('dm:') ? id.slice(3).split('~') : null),
+  };
+  state.rooms.set(id, room);
+  return room;
+}
+
+function dmId(a, b) { return 'dm:' + [a, b].sort().join('~'); }
+
+function roomLabel(room) {
+  if (!room) return '';
+  if (room.kind !== 'dm') return room.name;
+  const other = (room.members || []).find((m) => m !== state.me.id) || state.me.id;
+  const u = state.users.get(other);
+  return (u && u.nick) || 'crew member';
+}
+
+/* ------------------------------------------------------------- connection */
+
+let ws = null;
+let retryTimer = null;
+let retryDelay = 800;
+let connected = false;
+
+function wsURL() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return proto + '//' + location.host + '/ws';
+}
+
+let connecting = false;
+
+async function connect() {
+  if (connecting) return;
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+  connecting = true;
+  setStatus('retry', 'Connecting…');
+
+  /* Probe over plain HTTP before opening a socket. Browsers throttle repeated
+     failed WebSocket handshakes to the same host — which is precisely what a
+     rebooting hub or a phone drifting in and out of range produces — and the
+     penalty grows into minutes. A cheap GET carries no such penalty, so the
+     socket is only ever opened against a hub that just answered. */
+  try {
+    const probe = await fetch('health', { cache: 'no-store' });
+    if (!probe.ok) throw new Error('hub not ready');
+  } catch {
+    connecting = false;
+    setStatus('down', navigator.onLine === false ? 'Wi-Fi off' : 'Waiting for the hub…');
+    scheduleRetry();
+    return;
+  }
+
+  connecting = false;
+  try { ws = new WebSocket(wsURL()); } catch { scheduleRetry(); return; }
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify({
+      t: 'hello',
+      deviceId: state.me.id,
+      nick: state.me.nick,
+      since: state.lastSeq,
+      passcode: state.passcode,
+    }));
+  };
+
+  ws.onmessage = (e) => {
+    let m;
+    try { m = JSON.parse(e.data); } catch { return; }
+    handleServer(m);
+  };
+
+  ws.onclose = () => {
+    connected = false;
+    setStatus('down', navigator.onLine === false ? 'Wi-Fi off' : 'Reconnecting…');
+    scheduleRetry();
+  };
+  ws.onerror = () => { try { ws.close(); } catch { /* already closing */ } };
+}
+
+/* Retries stay short because the probe above makes them nearly free: the goal
+   is to be back within a couple of seconds of the hub returning. */
+function scheduleRetry() {
+  if (retryTimer) return;
+  retryDelay = Math.min(retryDelay * 1.5, 5000);
+  retryTimer = setTimeout(() => { retryTimer = null; connect(); }, retryDelay);
+}
+
+/* A phone that sleeps kills the socket without firing onclose. Poll cheaply. */
+setInterval(() => {
+  if (!connected && (!ws || ws.readyState === WebSocket.CLOSED)) connect();
+  if (connected && ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ t: 'ping' }));
+}, 20000);
+/* Coming back to the app or back onto the network are both strong hints the
+   hub is reachable again — drop the backoff and try straight away. */
+function retryNow() {
+  retryDelay = 800;
+  if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+  if (!connected) connect();
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) retryNow(); });
+window.addEventListener('online', retryNow);
+
+async function handleServer(m) {
+  switch (m.t) {
+    case 'welcome':
+      connected = true;
+      retryDelay = 800;
+      state.me.id = m.you.id;
+      setStatus('live', 'Connected');
+      for (const r of m.rooms || []) ensureRoom(r.id, r);
+      setUsers(m.users || []);
+      renderSidebar();
+      break;
+
+    case 'denied':
+      setStatus('down', 'Passcode rejected');
+      localStorage.removeItem('cc.passcode');
+      $('joinErr').textContent = m.reason || 'Rejected.';
+      $('joinVeil').classList.add('show');
+      break;
+
+    case 'sync': {
+      const evs = m.events || [];
+      for (const ev of evs) applyEvent(ev);
+      if (evs.length) await idbPutMany('events', evs);
+      await saveMeta();
+      renderAll();
+      flushOutbox();
+      break;
+    }
+
+    case 'event': {
+      const ev = m.event;
+      const isNew = ev.t === 'msg' && !state.msgs.has(ev.id);
+      applyEvent(ev);
+      await idbPut('events', ev);
+      await saveMeta();
+      if (isNew && ev.from !== state.me.id) alertFor(ev);
+      renderAll();
+      break;
+    }
+
+    case 'ack': {
+      /* The hub took it. Promote the optimistic copy and drop the outbox row. */
+      const msg = state.msgs.get(m.id);
+      if (msg) { msg.pending = false; msg.seq = m.seq; msg.at = m.at || msg.at; }
+      state.outbox.delete(m.id);
+      await idbDel('outbox', m.id);
+      renderQueueBar();
+      renderMessages();
+      break;
+    }
+
+    case 'presence':
+      setUsers(m.users || []);
+      renderSidebar();
+      break;
+
+    case 'typing':
+      if (m.room === state.room && m.from !== state.me.id) {
+        state.typers.set(m.from, Date.now() + 4000);
+        renderTyping();
+      }
+      break;
+
+    case 'roomExists':
+      openRoom(m.id);
+      break;
+  }
+}
+
+function setUsers(list) {
+  for (const u of list) state.users.set(u.id, u);
+}
+
+function setStatus(kind, text) {
+  const el = $('status');
+  el.className = 'status ' + kind;
+  $('statusText').textContent = text;
+}
+
+/* ----------------------------------------------------------------- outbox */
+
+function uuid() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  return 'm-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+}
+
+async function sendMessage(text, att) {
+  const msg = {
+    t: 'msg',
+    id: uuid(),
+    room: state.room,
+    from: state.me.id,
+    nick: state.me.nick,
+    text: text,
+    att: att || null,
+    reply: state.reply ? state.reply.id : null,
+    at: Date.now(),
+    pending: true,
+    seq: 0,
+  };
+
+  state.msgs.set(msg.id, msg);
+  insertSorted(bucket(msg.room), msg);
+  state.outbox.set(msg.id, msg);
+  await idbPut('outbox', msg);
+
+  clearReply();
+  clearAttachment();
+  state.limit = Math.max(state.limit, 200);
+  renderMessages(true);
+  renderQueueBar();
+  flushOutbox();
+}
+
+function flushOutbox() {
+  if (!connected || !ws || ws.readyState !== WebSocket.OPEN) return;
+  /* Oldest first, so a backlog lands in the order it was written. */
+  const queued = [...state.outbox.values()].sort((a, b) => a.at - b.at);
+  for (const msg of queued) {
+    ws.send(JSON.stringify({
+      t: 'msg', id: msg.id, room: msg.room, text: msg.text, att: msg.att, reply: msg.reply,
+    }));
+  }
+}
+
+function renderQueueBar() {
+  const n = state.outbox.size;
+  const bar = $('queueBar');
+  bar.classList.toggle('show', n > 0);
+  if (n) bar.textContent = n === 1 ? '1 message waiting to send' : n + ' messages waiting to send';
+}
+
+/* --------------------------------------------------------------- rendering */
+
+function colorFor(id) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return 'hsl(' + (h % 360) + ' 58% 45%)';
+}
+function initials(nick) {
+  const parts = String(nick || '?').trim().split(/\s+/);
+  return ((parts[0][0] || '?') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+}
+function avatarEl(id, nick, cls) {
+  const d = document.createElement('div');
+  d.className = 'avatar' + (cls ? ' ' + cls : '');
+  d.style.background = colorFor(id || nick || '?');
+  d.textContent = initials(nick);
+  return d;
+}
+function fmtTime(ts) {
+  return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+function fmtDay(ts) {
+  const d = new Date(ts), now = new Date();
+  const days = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  return d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+}
+function fmtSize(n) {
+  if (!n) return '';
+  if (n < 1024) return n + ' B';
+  if (n < 1048576) return (n / 1024).toFixed(0) + ' KB';
+  return (n / 1048576).toFixed(1) + ' MB';
+}
+
+function renderAll() {
+  renderSidebar();
+  renderMessages();
+  renderQueueBar();
+}
+
+function renderSidebar() {
+  const rl = $('roomList');
+  rl.textContent = '';
+  const channels = [...state.rooms.values()].filter((r) => r.kind !== 'dm').sort((a, b) => a.name.localeCompare(b.name));
+  for (const room of channels) rl.appendChild(roomRow(room));
+
+  const cl = $('crewList');
+  cl.textContent = '';
+  const crew = [...state.users.values()]
+    .filter((u) => u.id !== state.me.id)
+    .sort((a, b) => (b.online - a.online) || a.nick.localeCompare(b.nick));
+
+  if (!crew.length) {
+    const p = document.createElement('div');
+    p.className = 'item';
+    p.style.color = 'var(--text-faint)';
+    p.textContent = 'nobody else yet';
+    cl.appendChild(p);
+  }
+  for (const u of crew) {
+    const id = dmId(state.me.id, u.id);
+    const btn = document.createElement('button');
+    btn.className = 'item' + (state.room === id ? ' on' : '');
+    const dot = document.createElement('span');
+    dot.className = 'presence' + (u.online ? ' on' : '');
+    const label = document.createElement('span');
+    label.className = 'label';
+    label.textContent = u.nick;
+    btn.append(dot, label);
+    const n = unread(id);
+    if (n) { const b = document.createElement('span'); b.className = 'badge'; b.textContent = n; btn.appendChild(b); }
+    btn.onclick = () => { ensureRoom(id, { kind: 'dm', members: [state.me.id, u.id] }); openRoom(id); };
+    cl.appendChild(btn);
+  }
+
+  const av = $('meAvatar');
+  av.style.background = colorFor(state.me.id);
+  av.textContent = initials(state.me.nick);
+  $('meNick').textContent = state.me.nick;
+  $('meId').textContent = state.me.id.slice(0, 8);
+}
+
+function roomRow(room) {
+  const btn = document.createElement('button');
+  btn.className = 'item' + (state.room === room.id ? ' on' : '');
+  const hash = document.createElement('span');
+  hash.className = 'hash';
+  hash.textContent = '#';
+  const label = document.createElement('span');
+  label.className = 'label';
+  label.textContent = room.name;
+  btn.append(hash, label);
+  const n = unread(room.id);
+  if (n) { const b = document.createElement('span'); b.className = 'badge'; b.textContent = n; btn.appendChild(b); }
+  btn.onclick = () => openRoom(room.id);
+  return btn;
+}
+
+function unread(roomId) {
+  const seen = state.lastRead[roomId] || 0;
+  const list = state.byRoom.get(roomId) || [];
+  let n = 0;
+  for (let i = list.length - 1; i >= 0; i--) {
+    const m = list[i];
+    if (!m.seq) continue;              // still queued locally, not "unread"
+    if (m.seq <= seen) break;
+    if (m.from !== state.me.id) n++;
+  }
+  return n;
+}
+
+function nearBottom() {
+  const el = $('messages');
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+}
+
+function renderMessages(forceBottom) {
+  const el = $('messages');
+  const stick = forceBottom || nearBottom();
+  el.textContent = '';
+
+  const room = state.rooms.get(state.room);
+  $('roomTitle').textContent = (room && room.kind === 'dm' ? '' : '#') + roomLabel(room || { name: state.room, kind: 'channel' });
+
+  const pusher = document.createElement('div');
+  pusher.className = 'pusher';
+  el.appendChild(pusher);
+
+  const all = state.byRoom.get(state.room) || [];
+  const list = all.slice(-state.limit);
+
+  if (!all.length) {
+    const e = document.createElement('div');
+    e.className = 'empty';
+    e.textContent = room && room.kind === 'dm'
+      ? 'No messages yet. Say hello.'
+      : 'Nothing here yet. First message sets the tone.';
+    el.appendChild(e);
+  }
+
+  if (all.length > list.length) {
+    const more = document.createElement('button');
+    more.className = 'more';
+    more.textContent = 'Load older messages';
+    more.onclick = () => { state.limit += 300; renderMessages(); };
+    el.appendChild(more);
+  }
+
+  let lastDay = '';
+  let prev = null;
+  for (const m of list) {
+    const day = fmtDay(m.at);
+    if (day !== lastDay) {
+      lastDay = day;
+      const d = document.createElement('div');
+      d.className = 'day';
+      const s = document.createElement('span');
+      s.textContent = day;
+      d.appendChild(s);
+      el.appendChild(d);
+      prev = null;
+    }
+    el.appendChild(messageRow(m, prev));
+    prev = m;
+  }
+
+  $('roomMeta').textContent = memberLine(room);
+  if (stick) el.scrollTop = el.scrollHeight;
+  markRead();
+}
+
+function memberLine(room) {
+  if (!room) return '';
+  if (room.kind === 'dm') {
+    const other = (room.members || []).find((m) => m !== state.me.id);
+    const u = state.users.get(other);
+    return u && u.online ? 'online' : 'offline';
+  }
+  let n = 0;
+  for (const u of state.users.values()) if (u.online) n++;
+  return n + (n === 1 ? ' person online' : ' people online');
+}
+
+function messageRow(m, prev) {
+  const mine = m.from === state.me.id;
+  const cont = prev && prev.from === m.from && (m.at - prev.at) < 5 * 60000 && !m.reply;
+
+  const row = document.createElement('div');
+  row.className = 'row' + (mine ? ' mine' : '') + (cont ? ' cont' : '');
+  row.dataset.id = m.id;
+
+  if (cont) {
+    const g = document.createElement('div');
+    g.className = 'gutter';
+    row.appendChild(g);
+  } else {
+    row.appendChild(avatarEl(m.from, m.nick));
+  }
+
+  const wrap = document.createElement('div');
+  wrap.className = 'bubble-wrap';
+
+  if (!cont && !mine) {
+    const who = document.createElement('div');
+    who.className = 'who-line';
+    who.textContent = m.nick;
+    wrap.appendChild(who);
+  }
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble' + (m.deleted ? ' gone' : '');
+
+  if (m.reply) {
+    const src = state.msgs.get(m.reply);
+    const q = document.createElement('div');
+    q.className = 'reply-quote';
+    const b = document.createElement('b');
+    b.textContent = src ? src.nick : 'message';
+    const t = document.createTextNode(src ? (src.text || (src.att ? src.att.name : '')) : 'no longer here');
+    q.append(b, t);
+    if (src) q.onclick = () => jumpTo(src.id);
+    bubble.appendChild(q);
+  }
+
+  if (m.deleted) {
+    bubble.appendChild(document.createTextNode('message deleted'));
+  } else {
+    if (m.text) bubble.appendChild(renderText(m.text));
+    if (m.att) bubble.appendChild(renderAttachment(m.att));
+  }
+
+  if (m.reactions && Object.keys(m.reactions).length) {
+    const rs = document.createElement('div');
+    rs.className = 'reactions';
+    for (const [emoji, who] of Object.entries(m.reactions)) {
+      const r = document.createElement('button');
+      r.className = 'reaction' + (who.includes(state.me.id) ? ' mine' : '');
+      r.textContent = emoji + ' ' + who.length;
+      r.onclick = () => react(m.id, emoji, !who.includes(state.me.id));
+      rs.appendChild(r);
+    }
+    bubble.appendChild(rs);
+  }
+
+  if (!m.deleted) bubble.appendChild(toolbar(m, mine));
+  wrap.appendChild(bubble);
+
+  const stamp = document.createElement('div');
+  stamp.className = 'stamp';
+  stamp.textContent = fmtTime(m.at);
+  if (mine) {
+    const tick = document.createElement('span');
+    tick.className = 'tick ' + (m.pending ? 'pending' : 'sent');
+    tick.textContent = m.pending ? '◌ queued' : '✓';
+    stamp.appendChild(tick);
+  }
+  wrap.appendChild(stamp);
+
+  row.appendChild(wrap);
+  /* Touch devices have no hover, so a long-press reveals the same tools. */
+  let timer = null;
+  row.addEventListener('touchstart', () => {
+    timer = setTimeout(() => {
+      document.querySelectorAll('.row.touched').forEach((r) => r.classList.remove('touched'));
+      row.classList.add('touched');
+    }, 420);
+  }, { passive: true });
+  row.addEventListener('touchend', () => clearTimeout(timer), { passive: true });
+  return row;
+}
+
+function toolbar(m, mine) {
+  const bar = document.createElement('div');
+  bar.className = 'tools';
+  for (const e of EMOJI.slice(0, 3)) {
+    const b = document.createElement('button');
+    b.textContent = e;
+    b.onclick = () => react(m.id, e, !(m.reactions && (m.reactions[e] || []).includes(state.me.id)));
+    bar.appendChild(b);
+  }
+  const rep = document.createElement('button');
+  rep.textContent = '↩';
+  rep.title = 'Reply';
+  rep.onclick = () => setReply(m);
+  bar.appendChild(rep);
+  if (mine) {
+    const del = document.createElement('button');
+    del.textContent = '🗑';
+    del.title = 'Delete';
+    del.onclick = () => { if (confirm('Delete this message for everyone?')) send({ t: 'del', msg: m.id }); };
+    bar.appendChild(del);
+  }
+  return bar;
+}
+
+/* Links and @mentions are built as DOM nodes, never as HTML strings — the one
+   place a chat app is guaranteed to be handed hostile-looking text. */
+function renderText(text) {
+  const frag = document.createDocumentFragment();
+  const pattern = /(https?:\/\/[^\s<]+|(?:^|\s)@[A-Za-z0-9_.-]{2,32})/g;
+  let last = 0;
+  let match;
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > last) frag.appendChild(document.createTextNode(text.slice(last, match.index)));
+    const token = match[0];
+    const lead = token.match(/^\s/) ? token[0] : '';
+    const body = lead ? token.slice(1) : token;
+    if (lead) frag.appendChild(document.createTextNode(lead));
+    if (body.startsWith('@')) {
+      const span = document.createElement('span');
+      const name = body.slice(1).toLowerCase();
+      span.className = 'mention' + (state.me.nick.toLowerCase().startsWith(name) ? ' me' : '');
+      span.textContent = body;
+      frag.appendChild(span);
+    } else {
+      const a = document.createElement('a');
+      a.href = body;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = body;
+      frag.appendChild(a);
+    }
+    last = match.index + token.length;
+  }
+  if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+  return frag;
+}
+
+function renderAttachment(att) {
+  const wrap = document.createElement('div');
+  wrap.className = 'att';
+  const type = att.type || '';
+
+  if (type.startsWith('image/')) {
+    const img = document.createElement('img');
+    img.src = att.url;
+    img.alt = att.name;
+    img.loading = 'lazy';
+    if (att.w && att.h) { img.width = att.w; img.height = att.h; }
+    img.onclick = () => { $('lightboxImg').src = att.url; $('lightbox').classList.add('show'); };
+    wrap.appendChild(img);
+    return wrap;
+  }
+  if (type.startsWith('video/')) {
+    const v = document.createElement('video');
+    v.src = att.url;
+    v.controls = true;
+    wrap.appendChild(v);
+    return wrap;
+  }
+  if (type.startsWith('audio/')) {
+    const a = document.createElement('audio');
+    a.src = att.url;
+    a.controls = true;
+    wrap.appendChild(a);
+    return wrap;
+  }
+
+  const chip = document.createElement('a');
+  chip.className = 'file-chip';
+  chip.href = att.url + '?dl=' + encodeURIComponent(att.name);
+  chip.setAttribute('download', att.name);
+  const icon = document.createElement('span');
+  icon.textContent = '📎';
+  const meta = document.createElement('span');
+  const n = document.createElement('div');
+  n.className = 'fname';
+  n.textContent = att.name;
+  const s = document.createElement('div');
+  s.className = 'fsize';
+  s.textContent = fmtSize(att.size);
+  meta.append(n, s);
+  chip.append(icon, meta);
+  wrap.appendChild(chip);
+  return wrap;
+}
+
+function jumpTo(id) {
+  const row = document.querySelector('.row[data-id="' + CSS.escape(id) + '"]');
+  if (!row) { toast('That message is further back — load older messages.'); return; }
+  row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  row.style.transition = 'background .3s';
+  row.style.background = 'var(--accent-soft)';
+  setTimeout(() => { row.style.background = ''; }, 900);
+}
+
+function renderTyping() {
+  const now = Date.now();
+  const names = [];
+  for (const [id, until] of state.typers) {
+    if (until < now) { state.typers.delete(id); continue; }
+    const u = state.users.get(id);
+    if (u) names.push(u.nick);
+  }
+  $('typing').textContent = names.length === 0 ? ''
+    : names.length === 1 ? names[0] + ' is typing…'
+    : names.slice(0, 3).join(', ') + ' are typing…';
+}
+setInterval(renderTyping, 1500);
+
+/* ------------------------------------------------------------------ alerts */
+
+let audioCtx = null;
+function beep() {
+  if (!state.prefs.sound) return;
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.frequency.value = 660;
+    o.type = 'sine';
+    g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.12, audioCtx.currentTime + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.22);
+    o.connect(g).connect(audioCtx.destination);
+    o.start();
+    o.stop(audioCtx.currentTime + 0.24);
+  } catch { /* audio is a nicety, never a failure */ }
+}
+
+function alertFor(ev) {
+  const room = state.rooms.get(ev.room);
+  const mentioned = ev.text && ev.text.toLowerCase().includes('@' + state.me.nick.toLowerCase().split(' ')[0]);
+  const isDM = room && room.kind === 'dm';
+  const elsewhere = ev.room !== state.room || document.hidden;
+  if (!elsewhere && !mentioned) { beep(); return; }
+  beep();
+  if (state.prefs.notify && 'Notification' in window && Notification.permission === 'granted') {
+    try {
+      new Notification(ev.nick + (isDM ? '' : ' · #' + (room ? room.name : ev.room)), {
+        body: ev.text || (ev.att ? ev.att.name : ''),
+        tag: ev.room,
+        icon: 'chat-192.png',
+      });
+    } catch { /* some browsers require the SW registration path */ }
+  }
+}
+
+let toastTimer = null;
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+/* --------------------------------------------------------------- actions */
+
+function send(obj) {
+  if (connected && ws && ws.readyState === WebSocket.OPEN) { ws.send(JSON.stringify(obj)); return true; }
+  return false;
+}
+
+function react(msgId, emoji, on) {
+  if (!send({ t: 'react', msg: msgId, emoji, on })) toast('Reactions need the hub — reconnecting.');
+}
+
+function openRoom(id) {
+  state.room = id;
+  state.limit = 200;
+  state.typers.clear();
+  clearReply();
+  ensureRoom(id);
+  closeDrawer();
+  renderAll();
+  renderTyping();
+  $('text').focus();
+  localStorage.setItem('cc.room', id);
+}
+
+function markRead() {
+  const list = state.byRoom.get(state.room) || [];
+  let top = 0;
+  for (const m of list) if ((m.seq || 0) > top) top = m.seq;
+  if (top > (state.lastRead[state.room] || 0)) {
+    state.lastRead[state.room] = top;
+    saveMeta();
+    renderSidebar();
+  }
+}
+
+function setReply(m) {
+  state.reply = m;
+  $('replyBar').classList.add('show');
+  $('replyTxt').textContent = m.nick + ': ' + (m.text || (m.att ? m.att.name : ''));
+  $('text').focus();
+}
+function clearReply() {
+  state.reply = null;
+  $('replyBar').classList.remove('show');
+}
+
+function clearAttachment() {
+  state.attachment = null;
+  $('pendingAtt').classList.remove('show');
+  $('pendingAtt').textContent = '';
+  $('file').value = '';
+  syncSendButton();
+}
+
+/* Photos off a phone camera are 4-8 MB each; on a shared boat Wi-Fi that is
+   the difference between instant and unusable. Downscale before upload. */
+async function shrinkImage(file) {
+  if (!file.type.startsWith('image/') || file.type === 'image/gif' || file.size < 400 * 1024) return null;
+  try {
+    const bmp = await createImageBitmap(file);
+    const max = 1600;
+    const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
+    if (scale === 1 && file.size < 1.5 * 1024 * 1024) return { w: bmp.width, h: bmp.height };
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bmp.width * scale);
+    canvas.height = Math.round(bmp.height * scale);
+    canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.82));
+    if (!blob || blob.size >= file.size) return { w: bmp.width, h: bmp.height };
+    return { blob, w: canvas.width, h: canvas.height, name: file.name.replace(/\.[^.]+$/, '') + '.jpg', type: 'image/jpeg' };
+  } catch { return null; }
+}
+
+async function uploadFile(file) {
+  const shrunk = await shrinkImage(file);
+  const body = (shrunk && shrunk.blob) || file;
+  const name = (shrunk && shrunk.name) || file.name;
+  const type = (shrunk && shrunk.type) || file.type || 'application/octet-stream';
+
+  const res = await fetch('upload', {
+    method: 'POST',
+    headers: {
+      'Content-Type': type,
+      'x-filename': encodeURIComponent(name),
+      'x-passcode': state.passcode,
+    },
+    body,
+  });
+  if (!res.ok) throw new Error(res.status === 413 ? 'File is too big (25 MB max).' : 'Upload failed.');
+  const att = await res.json();
+  if (shrunk) { att.w = shrunk.w; att.h = shrunk.h; }
+  return att;
+}
+
+/* -------------------------------------------------------------- composer */
+
+const textEl = $('text');
+
+function autoGrow() {
+  textEl.style.height = 'auto';
+  textEl.style.height = Math.min(textEl.scrollHeight, 160) + 'px';
+}
+function syncSendButton() {
+  $('sendBtn').disabled = !textEl.value.trim() && !state.attachment;
+}
+
+let typingSentAt = 0;
+textEl.addEventListener('input', () => {
+  autoGrow();
+  syncSendButton();
+  const now = Date.now();
+  if (now - typingSentAt > 2500 && textEl.value.trim()) {
+    typingSentAt = now;
+    send({ t: 'typing', room: state.room });
+  }
+});
+
+textEl.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  const wantsSend = state.prefs.enterSends ? !e.shiftKey : (e.ctrlKey || e.metaKey);
+  if (wantsSend) { e.preventDefault(); doSend(); }
+});
+
+async function doSend() {
+  const text = textEl.value.trim();
+  const att = state.attachment;
+  if (!text && !att) return;
+  textEl.value = '';
+  autoGrow();
+  syncSendButton();
+  await sendMessage(text, att);
+}
+
+$('sendBtn').onclick = doSend;
+$('attachBtn').onclick = () => $('file').click();
+$('replyCancel').onclick = clearReply;
+
+$('file').onchange = async () => {
+  const file = $('file').files[0];
+  if (!file) return;
+  if (!connected) { toast('Attachments need the hub. Text still queues fine.'); $('file').value = ''; return; }
+  if (file.size > 25 * 1024 * 1024) { toast('File is too big (25 MB max).'); $('file').value = ''; return; }
+
+  const box = $('pendingAtt');
+  box.classList.add('show');
+  box.textContent = 'Uploading ' + file.name + '…';
+  try {
+    const att = await uploadFile(file);
+    state.attachment = att;
+    box.textContent = '';
+    if ((att.type || '').startsWith('image/')) {
+      const img = document.createElement('img');
+      img.src = att.url;
+      box.appendChild(img);
+    } else {
+      box.appendChild(document.createTextNode('📎 '));
+    }
+    const label = document.createElement('span');
+    label.textContent = att.name + ' · ' + fmtSize(att.size);
+    const x = document.createElement('button');
+    x.className = 'icon-btn';
+    x.style.cssText = 'width:24px;height:24px';
+    x.textContent = '✕';
+    x.onclick = clearAttachment;
+    box.append(label, x);
+    syncSendButton();
+  } catch (e) {
+    box.classList.remove('show');
+    toast(e.message || 'Upload failed.');
+    $('file').value = '';
+  }
+};
+
+/* Paste an image straight from the clipboard — faster than the file picker
+   when someone is screenshotting a gauge reading. */
+textEl.addEventListener('paste', (e) => {
+  const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/'));
+  if (!item) return;
+  const file = item.getAsFile();
+  if (!file) return;
+  e.preventDefault();
+  const dt = new DataTransfer();
+  dt.items.add(new File([file], 'pasted-' + Date.now() + '.png', { type: file.type }));
+  $('file').files = dt.files;
+  $('file').dispatchEvent(new Event('change'));
+});
+
+/* Drag a file anywhere onto the window. */
+window.addEventListener('dragover', (e) => e.preventDefault());
+window.addEventListener('drop', (e) => {
+  e.preventDefault();
+  if (!e.dataTransfer.files.length) return;
+  $('file').files = e.dataTransfer.files;
+  $('file').dispatchEvent(new Event('change'));
+});
+
+/* ---------------------------------------------------------------- drawer */
+
+function openDrawer() { $('sidebar').classList.add('open'); $('scrim').classList.add('show'); }
+function closeDrawer() { $('sidebar').classList.remove('open'); $('scrim').classList.remove('show'); }
+$('menuBtn').onclick = openDrawer;
+$('scrim').onclick = closeDrawer;
+
+/* --------------------------------------------------------------- dialogs */
+
+$('addRoom').onclick = () => { $('roomVeil').classList.add('show'); $('roomName').focus(); };
+$('roomCancel').onclick = () => $('roomVeil').classList.remove('show');
+$('roomCreate').onclick = () => {
+  const name = $('roomName').value.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+  if (!name) return;
+  if (!send({ t: 'room', name })) { toast('Need the hub to create a channel.'); return; }
+  $('roomName').value = '';
+  $('roomVeil').classList.remove('show');
+  setTimeout(() => openRoom(name), 220);
+};
+
+$('settingsBtn').onclick = () => {
+  $('setNick').value = state.me.nick;
+  $('setTheme').value = state.prefs.theme;
+  toggleSwitch($('setSound'), state.prefs.sound);
+  toggleSwitch($('setNotify'), state.prefs.notify);
+  toggleSwitch($('setEnter'), state.prefs.enterSends);
+  $('settingsVeil').classList.add('show');
+};
+
+function toggleSwitch(el, on) { el.classList.toggle('on', !!on); }
+for (const id of ['setSound', 'setNotify', 'setEnter']) {
+  $(id).onclick = async () => {
+    const on = !$(id).classList.contains('on');
+    toggleSwitch($(id), on);
+    if (id === 'setNotify' && on && 'Notification' in window && Notification.permission === 'default') {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') toggleSwitch($(id), false);
+    }
+  };
+}
+
+$('settingsSave').onclick = async () => {
+  const nick = $('setNick').value.trim().slice(0, 32);
+  if (nick && nick !== state.me.nick) {
+    state.me.nick = nick;
+    localStorage.setItem('cc.nick', nick);
+    send({ t: 'nick', nick });
+  }
+  state.prefs.theme = $('setTheme').value;
+  state.prefs.sound = $('setSound').classList.contains('on');
+  state.prefs.notify = $('setNotify').classList.contains('on');
+  state.prefs.enterSends = $('setEnter').classList.contains('on');
+  applyTheme();
+  await saveMeta();
+  $('settingsVeil').classList.remove('show');
+  renderSidebar();
+};
+
+$('exportBtn').onclick = () => {
+  const room = state.rooms.get(state.room);
+  const lines = (state.byRoom.get(state.room) || []).map((m) =>
+    '[' + new Date(m.at).toLocaleString() + '] ' + m.nick + ': ' + (m.deleted ? '(deleted)' : m.text || '') +
+    (m.att ? ' <' + m.att.name + '>' : ''));
+  const header = 'Crew Chat — ' + roomLabel(room) + '\nExported ' + new Date().toLocaleString() + '\n\n';
+  const blob = new Blob([header + lines.join('\n')], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'crewchat-' + roomLabel(room).replace(/\W+/g, '-') + '.txt';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+};
+
+$('wipeBtn').onclick = async () => {
+  if (!confirm('Delete this device’s copy of the history? Messages the hub still has will come back.')) return;
+  await new Promise((r) => { const req = indexedDB.deleteDatabase(DB_NAME); req.onsuccess = req.onerror = req.onblocked = r; });
+  localStorage.removeItem('cc.room');
+  location.reload();
+};
+
+$('searchBtn').onclick = () => { $('searchVeil').classList.add('show'); $('searchInput').focus(); };
+$('searchInput').oninput = () => {
+  const q = $('searchInput').value.trim().toLowerCase();
+  const box = $('searchResults');
+  box.textContent = '';
+  if (q.length < 2) return;
+  const hits = [];
+  for (const m of state.msgs.values()) {
+    if (m.deleted || !m.text) continue;
+    if (!m.text.toLowerCase().includes(q)) continue;
+    hits.push(m);
+    if (hits.length > 200) break;
+  }
+  hits.sort((a, b) => b.at - a.at);
+  for (const m of hits.slice(0, 40)) {
+    const room = state.rooms.get(m.room);
+    const div = document.createElement('div');
+    div.className = 'search-result';
+    const top = document.createElement('div');
+    top.className = 'top';
+    const l = document.createElement('span');
+    l.textContent = m.nick + ' · ' + (room && room.kind === 'dm' ? roomLabel(room) : '#' + (room ? room.name : m.room));
+    const r = document.createElement('span');
+    r.textContent = fmtDay(m.at) + ' ' + fmtTime(m.at);
+    top.append(l, r);
+    const body = document.createElement('div');
+    body.className = 'body';
+    body.textContent = m.text;
+    div.append(top, body);
+    div.onclick = () => {
+      $('searchVeil').classList.remove('show');
+      if (m.room !== state.room) openRoom(m.room);
+      state.limit = Math.max(state.limit, (state.byRoom.get(m.room) || []).length);
+      renderMessages();
+      setTimeout(() => jumpTo(m.id), 60);
+    };
+    box.appendChild(div);
+  }
+};
+
+$('lightbox').onclick = () => $('lightbox').classList.remove('show');
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  document.querySelectorAll('.veil.show').forEach((v) => { if (v.id !== 'joinVeil') v.classList.remove('show'); });
+  $('lightbox').classList.remove('show');
+  closeDrawer();
+});
+for (const v of document.querySelectorAll('.veil')) {
+  v.addEventListener('click', (e) => { if (e.target === v && v.id !== 'joinVeil') v.classList.remove('show'); });
+}
+
+function applyTheme() {
+  document.documentElement.dataset.theme = state.prefs.theme;
+  document.querySelector('meta[name=theme-color]').content = state.prefs.theme === 'light' ? '#ffffff' : '#0e1116';
+}
+
+/* ------------------------------------------------------------------- boot */
+
+async function saveMeta() {
+  await idbPut('meta', {
+    lastSeq: state.lastSeq,
+    lastRead: state.lastRead,
+    prefs: state.prefs,
+  }, 'app');
+}
+
+async function boot() {
+  db = await openDB();
+
+  const meta = await idbGet('meta', 'app');
+  if (meta) {
+    state.lastSeq = meta.lastSeq || 0;
+    state.lastRead = meta.lastRead || {};
+    Object.assign(state.prefs, meta.prefs || {});
+  }
+  applyTheme();
+
+  /* Identity is a random id kept in localStorage: no accounts, no server to
+     ask, and the same phone keeps its DMs across restarts of the hub. */
+  let id = localStorage.getItem('cc.device');
+  if (!id) {
+    id = 'd' + uuid().replace(/-/g, '').slice(0, 20);
+    localStorage.setItem('cc.device', id);
+  }
+  state.me.id = id;
+  state.me.nick = localStorage.getItem('cc.nick') || '';
+  state.passcode = localStorage.getItem('cc.passcode') || '';
+  state.room = localStorage.getItem('cc.room') || 'general';
+
+  /* Replay the local mirror before touching the network, so the app is usable
+     the instant it opens — even with the hub switched off. */
+  const events = await idbAll('events');
+  events.sort((a, b) => a.seq - b.seq);
+  for (const ev of events) applyEvent(ev);
+
+  const queued = await idbAll('outbox');
+  for (const m of queued) {
+    m.pending = true;
+    state.outbox.set(m.id, m);
+    if (!state.msgs.has(m.id)) { state.msgs.set(m.id, m); insertSorted(bucket(m.room), m); }
+  }
+
+  ensureRoom('general');
+  ensureRoom(state.room);
+
+  let info = null;
+  try { info = await (await fetch('info', { cache: 'no-store' })).json(); } catch { /* hub is down; carry on offline */ }
+
+  if (info && info.passcode && !state.passcode) $('passField').style.display = '';
+
+  if (state.me.nick && (!info || !info.passcode || state.passcode)) {
+    startApp();
+  } else {
+    $('joinNick').value = state.me.nick;
+    $('joinVeil').classList.add('show');
+    $('joinNick').focus();
+  }
+}
+
+function startApp() {
+  $('joinVeil').classList.remove('show');
+  $('app').classList.add('ready');
+  renderAll();
+  markRead();
+  connect();
+  if (!connected) setStatus('down', 'Offline — reading local copy');
+  registerSW();
+}
+
+$('joinBtn').onclick = () => {
+  const nick = $('joinNick').value.trim().slice(0, 32);
+  if (!nick) { $('joinErr').textContent = 'Pick a name so people know who you are.'; return; }
+  const pass = $('joinPass').value;
+  state.me.nick = nick;
+  state.passcode = pass;
+  localStorage.setItem('cc.nick', nick);
+  if (pass) localStorage.setItem('cc.passcode', pass);
+  $('joinErr').textContent = '';
+  startApp();
+};
+$('joinNick').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('joinBtn').click(); });
+$('joinPass').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('joinBtn').click(); });
+
+function registerSW() {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('sw.js').catch(() => { /* http on a LAN IP still allows SW on localhost only; fine either way */ });
+}
+
+boot().catch((e) => {
+  document.body.innerHTML = '';
+  const p = document.createElement('div');
+  p.className = 'empty';
+  p.textContent = 'Could not start: ' + e.message;
+  document.body.appendChild(p);
+});
+</script>
+</body>
+</html>
