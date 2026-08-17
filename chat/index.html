@@ -848,9 +848,16 @@ function colorFor(id) {
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
   return 'hsl(' + (h % 360) + ' 58% 45%)';
 }
+/* Names on a ship carry rank in brackets — "Dev (Cadet)", "Anand (C/E)" — so
+   strip punctuation before picking letters, or every avatar reads "D(". */
 function initials(nick) {
-  const parts = String(nick || '?').trim().split(/\s+/);
-  return ((parts[0][0] || '?') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+  const parts = String(nick || '')
+    .split(/\s+/)
+    .map((p) => p.replace(/^[^\p{L}\p{N}]+/u, ''))
+    .filter(Boolean);
+  if (!parts.length) return '?';
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
+  return (parts[0][0] + last).toUpperCase();
 }
 function avatarEl(id, nick, cls) {
   const d = document.createElement('div');
